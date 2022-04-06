@@ -3,8 +3,19 @@
   "description": "get-youtube-description",
   "version": "1.0.0",
   "manifest_version": 3,
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab", "webNavigation", "scripting"],
   "background": {
     "service_worker": "./background.ts"
-  }
+  },
+  "action": {
+    "default_icon": {
+      "16": "./assets/logo.png",
+      "24": "./assets/logo.png",
+      "32": "./assets/logo.png"
+    },
+    "default_popup": "./popup/index.html"
+  },
+  "host_permissions": [
+    "*://*.youtube.com/*"
+  ]
 }
