@@ -3,9 +3,10 @@
   "description": "get-youtube-description",
   "version": "1.0.0",
   "manifest_version": 3,
-  "permissions": ["storage", "activeTab", "webNavigation", "scripting"],
+  "permissions": ["storage", "activeTab", "webNavigation", "scripting", "downloads"],
   "background": {
-    "service_worker": "./background.ts"
+    "service_worker": "./background.ts",
+    "type": "module"
   },
   "action": {
     "default_icon": {
