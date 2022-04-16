@@ -7,12 +7,6 @@ export function getFromBackground() {
   return 'getFromBackground'
 }
 
-interface VideoItem {
-  videoId: string,
-  videoTitle: string,
-  url: string,
-  text: string,
-}
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('onMessage', message)
   if (message === 'zip') {
@@ -20,9 +14,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const videoList: VideoItem[] = await getStorage()
       
       const zip = new JSZip()
-      videoList.filter((item) => item.text?.length > 0).map((item, idx) => {
+      const downloadVideoIdList: string[] = videoList.filter((item) => item.text?.length > 0).map((item, idx) => {
         // zip.file(`${new String(idx).padStart(3, '0')}_${item.videoTitle.slice(0, 20)}.md`, item.text)
-        zip.file(`${item.videoTitle.slice(0, 20)}.md`, item.text)
+        zip.file(item.filename, item.text)
+        return item.videoId
       })
 
       const content = await zip.generateAsync({ type: 'base64', platform: 'UNIX' })
@@ -32,9 +27,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       await chrome.downloads.download({
         url,
-        filename: 'test.zip'
+        filename: `${Date.now()}.zip`
       })
-      sendResponse('completed')
+      
+      sendResponse({ result: true, videoIds: downloadVideoIdList })
     })()
   }
 })

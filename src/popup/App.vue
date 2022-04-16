@@ -1,20 +1,14 @@
 <script setup lang="ts">
-import 'bulma'
 import { Ref, ref } from 'vue'
 import { getFromBackground } from '/src/background'
 import $ from 'jquery'
 import flow from 'lodash/fp/flow'
+
 import fileDownload from 'js-file-download'
 import JSZip from 'jszip'
 
 const message = ref('popup page')
 
-interface VideoItem {
-  videoId: string,
-  videoTitle: string,
-  url: string,
-  text: string,
-}
 const videoList: Ref<VideoItem[]> = ref([])
 
 const addVideoItem = () => {
@@ -23,6 +17,7 @@ const addVideoItem = () => {
     videoTitle: '',
     url: '',
     text: '',
+    filename: '',
   })
 }
 const parsePage = async (item: VideoItem) => {
@@ -50,6 +45,8 @@ const parsePage = async (item: VideoItem) => {
   item.videoId = videoId
   item.videoTitle = videoTitle
   item.text = md
+  item.filename = `${item.videoTitle.slice(0, 255)}.md`
+  // item.filename = `${item.videoTitle.slice(0, 20)}.md`
 
   // fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
 
@@ -65,7 +62,7 @@ const parseCurrentPage = async (item: VideoItem) => {
   }
 }
 const downloadTextFile = async (item: VideoItem) => {
-  fileDownload(item.text, `${item.videoTitle.slice(0, 20)}.md`)
+  fileDownload(item.text, item.filename)
 }
 const removeItem = async (item: VideoItem, idx: number) => {
   const deleteIdx = idx
@@ -100,7 +97,7 @@ const printText = async () => {
       `${target.videoDetails.shortDescription}`,
     ].join('\n')
 
-    fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
+    fileDownload(md, target.filename)
 
     // const el = root.querySelector('body > script')
     
@@ -113,14 +110,22 @@ const downloadAll = async function() {
   const zip = new JSZip()
   videoList.value.filter((item) => item.text?.length > 0).map((item, idx) => {
     // zip.file(`${new String(idx).padStart(3, '0')}_${item.videoTitle.slice(0, 20)}.md`, item.text)
-    zip.file(`${item.videoTitle.slice(0, 20)}.md`, item.text)
+    zip.file(item.filename, item.text)
   })
   const content = await zip.generateAsync({ type: 'blob', platform: 'UNIX' })
-  fileDownload(content, 'test.zip')
+  fileDownload(content, `${Date.now()}.zip`)
 }
 const downloadAllByBackground = async function() {
   chrome.runtime.sendMessage('zip', (result) => {
     console.log('responseCallback', result)
+    if (result?.result === true) {
+      const videoIds = <string[]> result?.videoIds ?? []
+      // 다운받은 비디오는 항목에서 삭제
+      videoList.value = videoList.value.filter((item) => !videoIds.includes(item.videoId))
+      
+      console.log('setStorage', JSON.parse(JSON.stringify(videoList.value)))
+      return setStorage(JSON.parse(JSON.stringify(videoList.value)))
+    }
   })
 }
 
@@ -178,8 +183,9 @@ function clearStorage(key = 'videoList') {
 </script>
 
 <template>
-  <div :style="{ width: '401px' }">
+  <div :style="{ width: '651px' }">
     {{ message }}
+
     <!-- <button @click="printText">텍스트 내놔</button> -->
     <button @click="downloadAllByBackground">downloadAllByBackground</button>
     <button @click="downloadAll">전체다운로드</button>
@@ -189,7 +195,8 @@ function clearStorage(key = 'videoList') {
 
     <div v-for="(item, idx) in videoList" :key="idx">
       <span>{{ idx + 1 }}</span>
-      <input type="text" v-model="item.url" @change="parsePage(item)">
+      <label>파일명<input type="text" v-model="item.filename" :readonly="!(item.text?.length > 0)"></label>
+      <label>URL<input type="text" v-model="item.url" @change="parsePage(item)"></label>
       <button type="button" @click="parseCurrentPage(item)">현재페이지</button>
       <button type="button" :disabled="!(item.text?.length > 0)" @click="downloadTextFile(item)">다운로드</button>
       <button type="button" @click="removeItem(item, idx)">삭제</button>
