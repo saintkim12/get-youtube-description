@@ -129,6 +129,26 @@ const downloadAllByBackground = async function() {
   })
 }
 
+const getFromPlaylistByBackground = async function() {
+  chrome.runtime.sendMessage('getFromPlaylist', (result) => {
+    console.log('getFromPlaylist', 'result', result)
+    // if (result?.resultType === 'init' && result?.result === true) {
+    //   const $videoList = await getStorage()
+    //   console.log('init ended', $videoList)
+    //   videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
+    // } else if (result?.resultType === 'load' && result?.result === true) {
+    //   const $videoList = await getStorage()
+    //   console.log('load ended', $videoList)
+    //   videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
+    // }
+    if (result?.result === true) {
+      getStorage().then($videoList => {
+        console.log('init ended', $videoList)
+        videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
+      })
+    }
+  })
+}
 const getFromPlaylist = async function() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) return
@@ -192,6 +212,7 @@ function clearStorage(key = 'videoList') {
     <button @click="removeAllItems">전체삭제</button>
     <button @click="addVideoItem">항목추가</button>
     <button @click="getFromPlaylist">getFromPlaylist</button>
+    <button @click="getFromPlaylistByBackground">getFromPlaylistByBackground</button>
 
     <div v-for="(item, idx) in videoList" :key="idx">
       <span>{{ idx + 1 }}</span>

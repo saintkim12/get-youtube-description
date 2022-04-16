@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
-
-console.log('hello')
+import cond from 'lodash/fp/cond'
+import flow from 'lodash/fp/flow'
 
 export function getFromBackground() {
   
@@ -9,8 +9,8 @@ export function getFromBackground() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('onMessage', message)
-  if (message === 'zip') {
-    ;(async () => {
+  cond<string, Promise<any>>([
+    [m => m === 'zip', async () => {
       const videoList: VideoItem[] = await getStorage()
       
       const zip = new JSZip()
@@ -31,8 +31,83 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
       
       sendResponse({ result: true, videoIds: downloadVideoIdList })
-    })()
-  }
+    }],
+    [m => m === 'getFromPlaylist', async () => {
+      const parsePage = async (item: VideoItem) => {
+        const url = item.url
+        if (!url) return item
+        const html = await fetch(url).then(r => r.text())
+        // const dom = $(html)
+        // console.log('html', html)
+        // console.log('dom', dom)
+        // console.log('$', $)
+        // const target = flow(
+        //   $html => $html.closest('script:contains("var ytInitialPlayerResponse")').html(),
+        //   script => script.split(';var meta')[0],
+        //   script => script.replace(/[\s]*var ytInitialPlayerResponse[\s]*=[\s]*/, ''),
+        //   jsonStr => JSON.parse(jsonStr)
+        // )(dom)
+        const target = flow(
+          $html => $html.slice($html.indexOf('var ytInitialPlayerResponse')),
+          $html => $html.slice(0, $html.indexOf(';var meta')),
+          script => script.replace(/[\s]*var ytInitialPlayerResponse[\s]*=[\s]*/, ''),
+          jsonStr => JSON.parse(jsonStr)
+        )(html)
+        // console.log('target', target)
+
+        const videoId = target.videoDetails.videoId
+        const videoTitle = target.videoDetails.title
+        const md = [ 
+          `# ${target.videoDetails.title}`,
+          `${target.videoDetails.shortDescription}`,
+        ].join('\n')
+        item.videoId = videoId
+        item.videoTitle = videoTitle
+        item.text = md
+        item.filename = `${item.videoTitle.replace(/\/\\/gi, ',').slice(0, 255)}.md`
+        // item.filename = `${item.videoTitle.slice(0, 20)}.md`
+
+        // fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
+
+        // console.log('setStorage', JSON.parse(JSON.stringify(videoList)))
+        // return await setStorage(JSON.parse(JSON.stringify(videoList)))
+        return item
+      }
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.id) return
+      const result = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        args: [],
+        func: () => {
+          const elList = document.querySelector('ytd-playlist-panel-renderer:not([hidden])')?.querySelectorAll?.('#items > ytd-playlist-panel-video-renderer > a') ?? []
+          const result = [...Array.from(elList.length ? elList : [])].map(el => (<HTMLAnchorElement> el).href)
+          console.log('result in tab', result)
+          return result
+        }
+      }).then(([result]) => <string[]> result?.result ?? [])
+    
+      // console.log('result', result)
+      
+      const $orgVideoList: VideoItem[] = await getStorage()
+      const $newVideoList: VideoItem[] = result.map(url => (<VideoItem> { videoId: '', videoTitle: '', url, text: '', filename: '' }))
+      
+      // await setStorage(JSON.parse(JSON.stringify($orgVideoList.concat($newVideoList))))
+      // sendResponse({ resultType: 'init', result: true })
+
+      const parserVideoList = await Promise.allSettled(
+        $newVideoList.map(item => parsePage(item))
+      )
+      // console.log('parserVideoList', parserVideoList)
+      const videoList = $orgVideoList.concat(parserVideoList.map((result, i) => (<PromiseFulfilledResult<VideoItem>> result)?.value ?? $newVideoList[i]))
+      // console.log('videoList', videoList)
+
+      // console.log('setStorage', JSON.parse(JSON.stringify(videoList)))
+      await setStorage(JSON.parse(JSON.stringify(videoList)))
+      sendResponse({ resultType: 'load', result: true })
+      
+    }]
+  ])(message)
 })
 
 
