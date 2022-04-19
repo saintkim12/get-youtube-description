@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { Ref, ref } from 'vue'
-import { getFromBackground } from '/src/background'
-import $ from 'jquery'
-import flow from 'lodash/fp/flow'
-
 import fileDownload from 'js-file-download'
-import JSZip from 'jszip'
-
-const message = ref('popup page')
 
 const videoList: Ref<VideoItem[]> = ref([])
 
@@ -20,39 +13,6 @@ const addVideoItem = () => {
     filename: '',
   })
 }
-const parsePage = async (item: VideoItem) => {
-  const url = item.url
-  if (!url) return
-  const html = await fetch(url).then(r => r.text())
-  const dom = $(html)
-  // console.log('html', html)
-  console.log('dom', dom)
-  console.log('$', $)
-  const target = flow(
-    $html => $html.closest('script:contains("var ytInitialPlayerResponse")').html(),
-    script => script.split(';var meta')[0],
-    script => script.replace(/[\s]*var ytInitialPlayerResponse[\s]*=[\s]*/, ''),
-    jsonStr => JSON.parse(jsonStr)
-  )(dom)
-  console.log('target', target)
-
-  const videoId = target.videoDetails.videoId
-  const videoTitle = target.videoDetails.title
-  const md = [ 
-    `# ${target.videoDetails.title}`,
-    `${target.videoDetails.shortDescription}`,
-  ].join('\n')
-  item.videoId = videoId
-  item.videoTitle = videoTitle
-  item.text = md
-  item.filename = `${item.videoTitle.slice(0, 255)}.md`
-  // item.filename = `${item.videoTitle.slice(0, 20)}.md`
-
-  // fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
-
-  console.log('setStorage', JSON.parse(JSON.stringify(videoList.value)))
-  return await setStorage(JSON.parse(JSON.stringify(videoList.value)))
-}
 const parseCurrentPage = async (item: VideoItem) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   console.log('tab', tab)
@@ -61,7 +21,7 @@ const parseCurrentPage = async (item: VideoItem) => {
     return parsePage(item)
   }
 }
-const downloadTextFile = async (item: VideoItem) => {
+const downloadOneVideoDescription = async (item: VideoItem) => {
   fileDownload(item.text, item.filename)
 }
 const removeItem = async (item: VideoItem, idx: number) => {
@@ -74,103 +34,81 @@ const removeAllItems = async () => {
   return await setStorage(JSON.parse(JSON.stringify(videoList.value)))
 }
 
-const printText = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  console.log('tab', tab)
-  if (tab.url) {
-    const html = await fetch(tab.url).then(r => r.text())
-    const dom = $(html)
-    // console.log('html', html)
-    console.log('dom', dom)
-    console.log('$', $)
-    const target = flow(
-      $html => $html.closest('script:contains("var ytInitialPlayerResponse")').html(),
-      script => script.split(';var meta')[0],
-      script => script.replace(/[\s]*var ytInitialPlayerResponse[\s]*=[\s]*/, ''),
-      jsonStr => JSON.parse(jsonStr)
-    )(dom)
-    console.log('target', target)
-
-    const videoId = target.videoDetails.videoId
-    const md = [ 
-      `# ${target.videoDetails.title}`,
-      `${target.videoDetails.shortDescription}`,
-    ].join('\n')
-
-    fileDownload(md, target.filename)
-
-    // const el = root.querySelector('body > script')
-    
-    // console.log('el', el?.innerHTML)
-  }
-  message.value = `${tab.url ?? ''}`
-}
-
-const downloadAll = async function() {
-  const zip = new JSZip()
-  videoList.value.filter((item) => item.text?.length > 0).map((item, idx) => {
-    // zip.file(`${new String(idx).padStart(3, '0')}_${item.videoTitle.slice(0, 20)}.md`, item.text)
-    zip.file(item.filename, item.text)
+/***************************
+ * cmds                    *
+ ***************************/
+function runInBackground(cmd: MessageCmd, ...listeners: ((message: any, port: chrome.runtime.Port) => void)[]) {
+  const port = chrome.runtime.connect({ name: 'background' })
+  port.postMessage(cmd)
+  listeners.forEach(lst => {
+    port.onMessage.addListener(lst)
   })
-  const content = await zip.generateAsync({ type: 'blob', platform: 'UNIX' })
-  fileDownload(content, `${Date.now()}.zip`)
+  return port
 }
-const downloadAllByBackground = async function() {
-  chrome.runtime.sendMessage('zip', (result) => {
-    console.log('responseCallback', result)
-    if (result?.result === true) {
-      const videoIds = <string[]> result?.videoIds ?? []
-      // 다운받은 비디오는 항목에서 삭제
-      videoList.value = videoList.value.filter((item) => !videoIds.includes(item.videoId))
-      
-      console.log('setStorage', JSON.parse(JSON.stringify(videoList.value)))
-      return setStorage(JSON.parse(JSON.stringify(videoList.value)))
-    }
+function downloadAllVideoDescription() {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'zip' }, (message, port) => {
+      // console.log('App.vue::message', message)
+      const { result, videoIds: $videoIds }: { result: boolean, videoIds: string[] } = message
+      if (result === true) {
+        ;(async() => {
+          const v = await getStorage()
+          videoList.value = [...v]
+          port.disconnect()
+          resolve(result)
+        })()
+      }
+      return true
+    })
   })
 }
-
-const getFromPlaylistByBackground = async function() {
-  chrome.runtime.sendMessage('getFromPlaylist', (result) => {
-    console.log('getFromPlaylist', 'result', result)
-    // if (result?.resultType === 'init' && result?.result === true) {
-    //   const $videoList = await getStorage()
-    //   console.log('init ended', $videoList)
-    //   videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
-    // } else if (result?.resultType === 'load' && result?.result === true) {
-    //   const $videoList = await getStorage()
-    //   console.log('load ended', $videoList)
-    //   videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
-    // }
-    if (result?.result === true) {
-      getStorage().then($videoList => {
-        console.log('init ended', $videoList)
-        videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
-      })
-    }
+function getFromPlayList() {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'getFromPlayList' }, (message: { result: boolean, ended: boolean, videoList: VideoItem[] }, port) => {
+      // console.log('getFromPlayList', 'result', message)
+      if (!message.result) return
+      // console.log('ended', message.ended)
+      // unref(updateVideoListUnWatcherRef)?.()
+      if (!message.ended) {
+        // updateVideoListUnWatcherRef.value = debounce(500)(async () => {
+        //   videoList.value = [...(await getStorage())]
+        // })
+        videoList.value = [...message.videoList]
+      }
+      if (message.ended) {
+        // unref(updateVideoListUnWatcherRef)?.()
+        videoList.value = [...message.videoList]
+        port.disconnect()
+        resolve(message.result)
+      }
+      return true
+    })
   })
 }
-const getFromPlaylist = async function() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id) return
-  const result = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    args: [],
-    func: () => {
-      const elList = document.querySelector('ytd-playlist-panel-renderer:not([hidden])')?.querySelectorAll?.('#items > ytd-playlist-panel-video-renderer > a') ?? []
-      const result = [...Array.from(elList.length ? elList : [])].map(el => (<HTMLAnchorElement> el).href)
-      console.log('result in tab', result)
-      return result
-    }
-  }).then(([result]) => <string[]> result?.result ?? [])
-
-  console.log('result', result)
-
-  videoList.value = videoList.value.concat(result.map(url => (<VideoItem> { videoId: '', videoTitle: '', url, text: '' })))
-  
-  return Promise.all(
-    videoList.value.map(item => parsePage(item))
-  )
+function parsePage(item: VideoItem) {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'parsePage', args: [item] }, (message, port) => {
+      if (message?.result === true) {
+        const videoItem = message.videoList[0]
+        Object.assign(item, videoItem)
+        // console.log('setStorage', JSON.parse(JSON.stringify(videoList.value)))
+        ;(async() => {
+          await setStorage(JSON.parse(JSON.stringify(videoList.value)))
+          port.disconnect()
+          resolve(message.result)
+        })()
+      }
+      return true
+    })
+  })
 }
+
+/**************************
+ * test
+ **************************/
+/**************************
+ * test
+ **************************/
 
 /* onCreated */
 ;(async () => {
@@ -203,24 +141,38 @@ function clearStorage(key = 'videoList') {
 </script>
 
 <template>
-  <div :style="{ width: '651px' }">
-    {{ message }}
-
-    <!-- <button @click="printText">텍스트 내놔</button> -->
-    <button @click="downloadAllByBackground">downloadAllByBackground</button>
-    <button @click="downloadAll">전체다운로드</button>
-    <button @click="removeAllItems">전체삭제</button>
-    <button @click="addVideoItem">항목추가</button>
-    <button @click="getFromPlaylist">getFromPlaylist</button>
-    <button @click="getFromPlaylistByBackground">getFromPlaylistByBackground</button>
-
-    <div v-for="(item, idx) in videoList" :key="idx">
-      <span>{{ idx + 1 }}</span>
-      <label>파일명<input type="text" v-model="item.filename" :readonly="!(item.text?.length > 0)"></label>
-      <label>URL<input type="text" v-model="item.url" @change="parsePage(item)"></label>
-      <button type="button" @click="parseCurrentPage(item)">현재페이지</button>
-      <button type="button" :disabled="!(item.text?.length > 0)" @click="downloadTextFile(item)">다운로드</button>
-      <button type="button" @click="removeItem(item, idx)">삭제</button>
+  <div class="container is-fluid px-0" :style="{ width: '651px' }">
+    <div class="box is-flex">
+      <button class="button is-small" @click="downloadAllVideoDescription">다운로드</button>
+      <button class="button is-small" @click="addVideoItem">+</button>
+      <button class="button is-small" @click="removeAllItems">-</button>
+      <button class="button is-small" @click="getFromPlayList">플레이리스트</button>
+      
+    </div>
+    <br>
+    <div class="box table-container">
+      <table class="table is-striped is-fullwidth is-narrow">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>파일명</th>
+            <th>URL</th>
+            <th>{..}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, idx) in videoList" :key="idx">
+            <td>{{ idx + 1 }}</td>
+            <td><input type="text" class="input is-small" v-model="item.filename" :readonly="!(item.text?.length > 0)"></td>
+            <td><input type="text" class="input is-small" v-model="item.url" @change="parsePage(item)"></td>
+            <td>
+              <a class="tag is-clickable" @click.prevent="parseCurrentPage(item)">현재페이지</a>
+              <a class="tag is-clickable" :disabled="!(item.text?.length > 0)" @click.prevent="downloadOneVideoDescription(item)">다운로드</a>
+              <a class="tag is-delete" @click.prevent="removeItem(item, idx)"></a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
