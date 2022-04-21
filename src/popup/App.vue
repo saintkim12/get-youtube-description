@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Ref, ref } from 'vue'
+import { computed, Ref, ref } from 'vue'
 import fileDownload from 'js-file-download'
 
 const videoList: Ref<VideoItem[]> = ref([])
@@ -106,6 +106,18 @@ function parsePage(item: VideoItem) {
 /**************************
  * test
  **************************/
+const tabs = ref([
+  { id: 'getDescriptions', title: 'Get Descriptions' },
+  { id: 'descriptionTemplate', title: 'Description Template' },
+  { id: 'settings', title: 'Settings' },
+])
+const tabId = ref(tabs.value[0]?.id)
+const activeTab = computed(() => tabs.value.find(({ id }) => id === tabId.value))
+const descriptionTemplate = ref(`aaa
+  bbb
+  ccc
+`)
+
 /**************************
  * test
  **************************/
@@ -141,38 +153,127 @@ function clearStorage(key = 'videoList') {
 </script>
 
 <template>
-  <div class="container is-fluid px-0" :style="{ width: '651px' }">
-    <div class="box is-flex">
-      <button class="button is-small" @click="downloadAllVideoDescription">다운로드</button>
-      <button class="button is-small" @click="addVideoItem">+</button>
-      <button class="button is-small" @click="removeAllItems">-</button>
-      <button class="button is-small" @click="getFromPlayList">플레이리스트</button>
-      
-    </div>
-    <br>
-    <div class="box table-container">
-      <table class="table is-striped is-fullwidth is-narrow">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>파일명</th>
-            <th>URL</th>
-            <th>{..}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, idx) in videoList" :key="idx">
-            <td>{{ idx + 1 }}</td>
-            <td><input type="text" class="input is-small" v-model="item.filename" :readonly="!(item.text?.length > 0)"></td>
-            <td><input type="text" class="input is-small" v-model="item.url" @change="parsePage(item)"></td>
-            <td>
-              <a class="tag is-clickable" @click.prevent="parseCurrentPage(item)">현재페이지</a>
-              <a class="tag is-clickable" :disabled="!(item.text?.length > 0)" @click.prevent="downloadOneVideoDescription(item)">다운로드</a>
-              <a class="tag is-delete" @click.prevent="removeItem(item, idx)"></a>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+  <div :style="{ width: '651px', height: '600px' }">
+    <nav class="panel">
+      <div class="panel-block p-0 is-block">
+        <div class="tabs is-small is-fullwidth">
+          <ul>
+            <li
+              v-for="({ id, title }) in tabs"
+              :key="id"
+              :class="[id === tabId && 'is-active']"
+            >
+              <a @click="tabId = id">{{ title }}</a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="panel-block is-block" :style="{ height: 'calc(600px - 32px)' }">
+        <template v-if="false"></template>
+        <template v-else-if="tabId === 'getDescriptions'">
+          <div class="is-flex is-fullwidth is-justify-content-space-between">
+            <div class="is-flex">
+              <h3 class="subtitle">{{ activeTab?.title }}</h3>
+            </div>
+            <div class="is-flex">
+              <button class="button is-small ml-1" title="전체다운로드" @click="downloadAllVideoDescription">
+                <i class="icon mdi mdi-18px mdi-download-multiple"></i>
+              </button>
+              <button class="button is-small ml-1" title="항목추가" @click="addVideoItem">
+                <i class="icon mdi mdi-18px mdi-plus-circle"></i>
+              </button>
+              <button class="button is-small ml-1" title="전체삭제" @click="removeAllItems">
+                <i class="icon mdi mdi-18px mdi-trash-can"></i>
+              </button>
+              <button class="button is-small ml-1" title="플레이리스트추가" @click="getFromPlayList">
+                <i class="icon mdi mdi-18px mdi-music-note-plus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+            <template v-for="(item, idx) in videoList" :key="idx">
+              <div class="card pt-2">
+                <div class="card-content p-1">
+                  <div class="media mb-2">
+                    <div class="media-content is-clipped">
+                      <div class="is-flex is-justify-content-space-between">
+                        <div class="field has-addons has-addons-right mb-0" :style="{ width: 'calc(100% - 132px)' }">
+                          <p class="control">
+                            <input class="input is-small is-static" type="text" readonly :value="`#${idx + 1}`" :style="{ width: '36px' }">
+                          </p>
+                          <p class="control is-expanded">
+                            <input class="input is-small" type="text" placeholder="filename" v-model="item.filename" :readonly="!(item.text?.length > 0)">
+                          </p>
+                          <p class="control">
+                            <span class="select is-small">
+                              <select>
+                                <option>md</option>
+                                <option>txt</option>
+                              </select>
+                            </span>
+                          </p>
+                        </div>
+                        <div>
+                          <button class="button is-small ml-1" title="현재페이지" @click.prevent="parseCurrentPage(item)"><i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i></button>
+                          <button class="button is-small ml-1" title="다운로드" :disabled="!(item.text?.length > 0)" @click.prevent="downloadOneVideoDescription(item)"><i class="icon mdi mdi-18px mdi-download"></i></button>
+                          <button class="button is-small ml-1" title="삭제" @click.prevent="removeItem(item, idx)"><i class="icon mdi mdi-18px mdi-close"></i></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- <div v-show="false" class="content mb-2"> -->
+                  <div class="content mb-2">
+                    <div class="control has-icons-left has-icons-right">
+                      <input class="input is-small" type="text" v-model="item.url" @change="parsePage(item)">
+                      <span class="icon is-small is-left">
+                        <i class="mdi mdi-web"></i>
+                      </span>
+                      <span class="icon is-small is-right">
+                        <i class="mdi mdi-check"></i>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <hr class="py-0 my-0">
+            </template>
+          </div>
+        </template>
+        <template v-else-if="tabId === 'descriptionTemplate'">
+          <div class="is-flex is-fullwidth is-justify-content-space-between">
+            <div class="is-flex">
+              <h3 class="subtitle">{{ activeTab?.title }}</h3>
+            </div>
+            <div class="is-flex">
+              <button class="button is-small ml-1" title="초기화"><i class="icon mdi mdi-18px mdi-cached"></i></button>
+              <button class="button is-small ml-1" title="저장"><i class="icon mdi mdi-18px mdi-content-save"></i></button>
+            </div>
+          </div>
+          <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+            <textarea
+              class="textarea has-fixed-size"
+              v-model="descriptionTemplate"
+              :style="{ height: 'calc(100% - 0.25rem)' }"
+            ></textarea>
+          </div>
+        </template>
+        <template v-else-if="tabId === 'settings'">
+          <div class="is-flex is-fullwidth is-justify-content-space-between">
+            <div class="is-flex">
+              <h3 class="subtitle">{{ activeTab?.title }}</h3>
+            </div>
+            <div class="is-flex">
+              <!-- <button class="button is-small ml-1" title="초기화"><i class="icon mdi mdi-18px mdi-cached"></i></button> -->
+              <!-- <button class="button is-small ml-1" title="저장"><i class="icon mdi mdi-18px mdi-content-save"></i></button> -->
+            </div>
+          </div>
+          <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+          </div>
+        </template>
+        <template v-else>
+          {{ tabId }}
+        </template>
+      </div>
+    </nav>
   </div>
 </template>

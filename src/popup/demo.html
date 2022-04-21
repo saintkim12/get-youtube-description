@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>demo: popup</title>
+  <link rel="stylesheet" href="https://unpkg.com/bulma">
+  <link rel="stylesheet" href="https://unpkg.com/@mdi/font/css/materialdesignicons.min.css">
+  <script src="https://unpkg.com/petite-vue-csp"></script>
+  <style>
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div v-scope="App()"></div>
+  <template id="app-template">
+    <div :style="{ width: '651px', height: '600px' }">
+      <nav class="panel">
+        <div class="panel-block p-0 is-block">
+          <div class="tabs is-small is-fullwidth">
+            <ul>
+              <li
+                v-for="({ id, title }) in tabs"
+                :key="id"
+                :class="[id === tabId && 'is-active']"
+              >
+                <a @click="tabId = id">{{ title }}</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel-block is-block" :style="{ height: 'calc(600px - 100px)' }">
+          <template v-if="false"></template>
+          <template v-else-if="tabId === 'getDescriptions'">
+            <div class="is-flex is-fullwidth is-justify-content-space-between">
+              <div class="is-flex">
+                <h3 class="subtitle">{{ getActiveTabTitle() }}</h3>
+              </div>
+              <div class="is-flex">
+                <button class="button is-small ml-1" title="전체다운로드"><i class="icon mdi mdi-18px mdi-download-multiple"></i></button>
+                <button class="button is-small ml-1" title="항목추가"><i class="icon mdi mdi-18px mdi-plus-circle"></i></button>
+                <button class="button is-small ml-1" title="전체삭제"><i class="icon mdi mdi-18px mdi-trash-can"></i></button>
+                <button class="button is-small ml-1" title="플레이리스트추가"><i class="icon mdi mdi-18px mdi-music-note-plus"></i></button>
+              </div>
+            </div>
+            <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+              <template v-for="i in 5">
+                <div class="card pt-2">
+                  <div class="card-content p-1">
+                    <div class="media mb-2">
+                      <div class="media-content is-clipped">
+                        <div class="is-flex is-justify-content-space-between">
+                          <div class="field has-addons has-addons-right mb-0" :style="{ width: 'calc(100% - 132px)' }">
+                            <p class="control">
+                              <input class="input is-small is-static" type="text" readonly :value="'#' + i" :style="{ width: '36px' }">
+                            </p>
+                            <p class="control is-expanded">
+                              <input class="input is-small" type="text" placeholder="filename">
+                            </p>
+                            <p class="control">
+                              <span class="select is-small">
+                                <select>
+                                  <option>md</option>
+                                  <option>txt</option>
+                                </select>
+                              </span>
+                            </p>
+                          </div>
+                          <div>
+                            <button class="button is-small ml-1" title="현재페이지"><i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i></button>
+                            <button class="button is-small ml-1" title="다운로드"><i class="icon mdi mdi-18px mdi-download"></i></button>
+                            <button class="button is-small ml-1" title="삭제"><i class="icon mdi mdi-18px mdi-close"></i></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- <div v-show="false" class="content mb-2"> -->
+                    <div class="content mb-2">
+                      <div class="control has-icons-left has-icons-right">
+                        <input class="input is-small" type="text">
+                        <span class="icon is-small is-left">
+                          <i class="mdi mdi-web"></i>
+                        </span>
+                        <span class="icon is-small is-right">
+                          <i class="mdi mdi-check"></i>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <hr class="py-0 my-0">
+              </template>
+            </div>
+          </template>
+          <template v-else-if="tabId === 'descriptionTemplate'">
+            <div class="is-flex is-fullwidth is-justify-content-space-between">
+              <div class="is-flex">
+                <h3 class="subtitle">{{ getActiveTabTitle() }}</h3>
+              </div>
+              <div class="is-flex">
+                <button class="button is-small ml-1" title="초기화"><i class="icon mdi mdi-18px mdi-cached"></i></button>
+                <button class="button is-small ml-1" title="저장"><i class="icon mdi mdi-18px mdi-content-save"></i></button>
+              </div>
+            </div>
+            <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+              <textarea
+                class="textarea has-fixed-size"
+                v-model="descriptionTemplate"
+                :style="{ height: 'calc(100% - 0.25rem)' }"
+              ></textarea>
+            </div>
+          </template>
+          <template v-else-if="tabId === 'settings'">
+            <div class="is-flex is-fullwidth is-justify-content-space-between">
+              <div class="is-flex">
+                <h3 class="subtitle">{{ getActiveTabTitle() }}</h3>
+              </div>
+              <div class="is-flex">
+                <!-- <button class="button is-small ml-1" title="초기화"><i class="icon mdi mdi-18px mdi-cached"></i></button> -->
+                <!-- <button class="button is-small ml-1" title="저장"><i class="icon mdi mdi-18px mdi-content-save"></i></button> -->
+              </div>
+            </div>
+            <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+            </div>
+          </template>
+          <template v-else>
+            {{ tabId }}
+          </template>
+        </div>
+      </nav>
+    </div>
+  </template>
+  <script>
+    PetiteVue.createApp({
+      App: () => {
+        const tabs = [
+          ['getDescriptions', 'Get Descriptions'],
+          ['descriptionTemplate', 'Description Template'],
+          ['settings', 'Settings']
+        ].reduce((arr, [id, title]) => arr = arr.concat({ id, title }), [])
+        return ({
+          $template: '#app-template',
+          tabs,
+          tabId: tabs?.[0]?.id,
+          getActiveTab(){ const tabId = this.tabId; return tabs.find(({ id }) => id === this.tabId) },
+          getActiveTabTitle(){ return this.getActiveTab()?.title },
+          descriptionTemplate: `aaa
+            bbb
+            ccc
+          `
+        })
+      },
+    }).mount()
+  </script>
+</body>
+</html>
