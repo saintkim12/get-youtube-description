@@ -1,43 +1,27 @@
 <script setup lang="ts">
-import { computed, Ref, ref, nextTick } from 'vue'
+import { computed, Ref, ref, nextTick, unref } from 'vue'
 import fileDownload from 'js-file-download'
 
 const videoList: Ref<VideoItem[]> = ref([])
 const videoListRef: Ref<HTMLDivElement | undefined> = ref()
 
-const addVideoItem = () => {
-  videoList.value.push({
-    videoId: '',
-    videoTitle: '',
-    url: '',
-    description: '',
-    filename: '',
-  })
-  nextTick(() => {
-    console.log('videoListRef.value', videoListRef.value)
-    if (videoListRef.value) {
-      videoListRef.value.scrollTo({ top: videoListRef.value.scrollHeight })
-    }
-  })
-}
-const parseCurrentPage = async (item: VideoItem) => {
+const parseCurrentPage = async (item: VideoItem, idx: number) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   console.log('tab', tab)
   if (tab.url) {
     item.url = tab.url
-    return parsePage(item)
+    return parsePage(item, idx)
   }
 }
-const removeItem = async (item: VideoItem, idx: number) => {
-  const deleteIdx = idx
-  videoList.value = videoList.value.filter(($0, _idx) => _idx !== deleteIdx)
-  return await setStorage(JSON.parse(JSON.stringify(videoList.value)))
-}
-const removeAllItems = () => {
-  return withLoader(async () => {
-    videoList.value = []
-    return await setStorage(JSON.parse(JSON.stringify(videoList.value)))
-  })
+
+function updateFileExtension(idx: number, target: EventTarget | null) {
+  const extension: string = (<HTMLSelectElement> target)?.value
+  // console.log('extension', extension)
+  if (!extension) return
+  const item = unref(videoList)?.[idx]
+  if (!item) return
+  item.filename = item.filename.replace(/\.(md|txt)[\s]*$/i, `.${extension}`)
+  return updateItem(idx)
 }
 
 /***************************
@@ -50,6 +34,51 @@ function runInBackground(cmd: MessageCmd, ...listeners: ((message: any, port: ch
     port.onMessage.addListener(lst)
   })
   return port
+}
+
+function addItem() {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'addItem' }, (message, port) => {
+      port.disconnect()
+      videoList.value = [...message.videoList]
+      resolve(message)
+
+      nextTick(() => {
+        console.log('videoListRef.value', videoListRef.value)
+        if (videoListRef.value) {
+          videoListRef.value.scrollTo({ top: videoListRef.value.scrollHeight })
+        }
+      })
+    })
+  })
+}
+function updateItem(idx: number) {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'updateItem', args: [{ item: unref(videoList)[idx], idx }] }, (message, port) => {
+      port.disconnect()
+      videoList.value = [...message.videoList]
+      resolve(message)
+    })
+  })
+}
+
+function removeItem(item: VideoItem, idx: number) {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'removeItem', args: [{ item, idx }] }, (message, port) => {
+      port.disconnect()
+      videoList.value = [...message.videoList]
+      resolve(message)
+    })
+  })
+}
+function removeAllItems() {
+  return withLoader(new Promise((resolve) => {
+    runInBackground({ cmd: 'removeAllItems' }, (message, port) => {
+      port.disconnect()
+      videoList.value = [...message.videoList]
+      resolve(message)
+    })
+  }))
 }
 
 function downloadOneVideoDescription(item: VideoItem) {
@@ -73,12 +102,12 @@ function downloadAllVideoDescription() {
       // console.log('App.vue::message', message)
       const { result, videoIds: $videoIds }: { result: boolean, videoIds: string[] } = message
       if (result === true) {
-        ;(async() => {
-          const v = await getStorage()
-          videoList.value = [...v]
-          port.disconnect()
-          resolve(result)
-        })()
+        // ;(async() => {
+        //   const v = await getStorage()
+        videoList.value = [...message.videoList]
+        port.disconnect()
+        resolve(result)
+        // })()
       }
       return true
     })
@@ -107,18 +136,18 @@ function getFromPlayList() {
     })
   }))
 }
-function parsePage(item: VideoItem) {
+function parsePage(item: VideoItem, idx: number) {
   return new Promise((resolve) => {
-    runInBackground({ cmd: 'parsePage', args: [item] }, (message, port) => {
+    runInBackground({ cmd: 'parsePage', args: [{ item, idx }] }, (message, port) => {
       if (message?.result === true) {
-        const videoItem = message.videoList[0]
+        const videoItem: VideoItem = message.videoList?.[0]?.item
         Object.assign(item, videoItem)
         // console.log('setStorage', JSON.parse(JSON.stringify(videoList.value)))
-        ;(async() => {
-          await setStorage(JSON.parse(JSON.stringify(videoList.value)))
-          port.disconnect()
-          resolve(message.result)
-        })()
+        // ;(async() => {
+        //   await setStorage(JSON.parse(JSON.stringify(videoList.value)))
+        port.disconnect()
+        resolve(message.result)
+        // })()
       }
       return true
     })
@@ -144,6 +173,24 @@ function initCanGetFromPlayList() {
         port.disconnect()
         resolve(message.result)
       }
+      return true
+    })
+  })
+}
+function getStorageData(...keys: string[]): Promise<{ [key: string]: any }> {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'getStorageData', args: keys }, (message, port) => {
+      port.disconnect()
+      resolve(message)
+      return true
+    })
+  })
+}
+function setStorageData(data: { [key: string]: any }) {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'setStorageData', args: [data] }, (message, port) => {
+      port.disconnect()
+      resolve(message)
       return true
     })
   })
@@ -182,8 +229,8 @@ const canGetFromPlayList = ref(false)
 /* onCreated */
 ;(() => {
   withLoader(async () => {
-    const $videoList = await getStorage()
-    console.log('$videoList', $videoList)
+    const $videoList = (await getStorageData('videoList'))?.videoList
+    // console.log('$videoList', $videoList)
     videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
 
     await initDescriptionTemplateSample()
@@ -191,28 +238,6 @@ const canGetFromPlayList = ref(false)
     await initCanGetFromPlayList().catch(() => {})
   })
 })()
-
-
-/**
- * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 조회
- */
-function getStorage(key = 'videoList') {
-  return chrome.storage.local.get([key]).then(({ [key]: value }) => {
-    return value
-  })
-}
-/**
- * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 설정
- */
-function setStorage(obj: any, key = 'videoList') {
-  return chrome.storage.local.set({ [key]: obj })
-}
-/**
- * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 초기화
- */
-function clearStorage(key = 'videoList') {
-  return chrome.storage.local.remove(key)
-}
 </script>
 
 <template>
@@ -242,7 +267,7 @@ function clearStorage(key = 'videoList') {
               <button class="button is-small ml-1" title="전체다운로드" @click="downloadAllVideoDescription">
                 <i class="icon mdi mdi-18px mdi-download-multiple"></i>
               </button>
-              <button class="button is-small ml-1" title="항목추가" @click="addVideoItem">
+              <button class="button is-small ml-1" title="항목추가" @click="addItem">
                 <i class="icon mdi mdi-18px mdi-plus-circle"></i>
               </button>
               <button class="button is-small ml-1" title="전체삭제" @click="removeAllItems">
@@ -266,19 +291,19 @@ function clearStorage(key = 'videoList') {
                               <input class="input is-small is-static" type="text" readonly :value="`#${idx + 1}`" :style="{ width: '36px' }">
                             </p>
                             <p class="control is-expanded">
-                              <input class="input is-small" type="text" placeholder="filename" v-model="item.filename" :readonly="!(item.description?.length > 0)">
+                              <input class="input is-small" type="text" placeholder="filename" v-model="item.filename" :readonly="!(item.description?.length > 0)" @change="updateItem(idx)">
                             </p>
                             <p class="control">
                               <span class="select is-small">
-                                <select>
-                                  <option>md</option>
-                                  <option>txt</option>
+                                <select @change="updateFileExtension(idx, $event.target)">
+                                  <option value="md">md</option>
+                                  <option value="txt" :selected="/\.(txt)[\s]*$/i.test(item.filename)">txt</option>
                                 </select>
                               </span>
                             </p>
                           </div>
                           <div>
-                            <button class="button is-small ml-1" title="현재페이지" @click.prevent="parseCurrentPage(item)"><i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i></button>
+                            <button class="button is-small ml-1" title="현재페이지" @click.prevent="parseCurrentPage(item, idx)"><i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i></button>
                             <button class="button is-small ml-1" title="다운로드" :disabled="!(item.description?.length > 0)" @click.prevent="downloadOneVideoDescription(item)"><i class="icon mdi mdi-18px mdi-download"></i></button>
                             <button class="button is-small ml-1" title="삭제" @click.prevent="removeItem(item, idx)"><i class="icon mdi mdi-18px mdi-close"></i></button>
                           </div>
@@ -288,7 +313,7 @@ function clearStorage(key = 'videoList') {
                     <!-- <div v-show="false" class="content mb-2"> -->
                     <div class="content mb-2">
                       <div class="control has-icons-left has-icons-right">
-                        <input class="input is-small" type="text" v-model="item.url" @change="parsePage(item)">
+                        <input class="input is-small" type="text" :value="item.url" @change="parsePage(item, idx)">
                         <span class="icon is-small is-left">
                           <i class="mdi mdi-web"></i>
                         </span>

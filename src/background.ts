@@ -1,7 +1,9 @@
 import JSZip from 'jszip'
+import debounce from 'lodash/fp/debounce'
 import cond from 'lodash/fp/cond'
 import flow from 'lodash/fp/flow'
-import { Ref, ref } from 'vue'
+import { Ref, ref, unref, watch } from 'vue'
+import sanitizeFilename from 'sanitize-filename'
 
 const DESCRIPTION_TEMPLATE_SAMPLE = [
   '# ${videoTitle}',
@@ -10,6 +12,33 @@ const DESCRIPTION_TEMPLATE_SAMPLE = [
   '',
   'Video URL: ${url}',
 ].join('\n')
+
+const videoList: Ref<VideoItem[]> = ref([])
+const settings: Ref<{ defaultExtension: string, [key: string]: any }> = ref({
+  defaultExtension: 'md',
+})
+const appStorage = {
+  videoList,
+  settings,
+}
+/* onCreated */
+;(async () => {
+  const $videoList = (await getStorage('videoList'))?.videoList
+  // console.log('$videoList', $videoList)
+  videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
+  
+  watch(videoList, debounce(500)(async () => {
+    await setStorage({ 'videoList': JSON.parse(JSON.stringify(unref(appStorage.videoList))) })
+    // console.log('setStorage(videoList)', (await getStorage('videoList'))?.videoList?.length ?? 0)
+  }), { deep: true })
+})()
+
+
+function updateItem(item: VideoItem, updateIdx: number) {
+  // console.log('updateItem', updateIdx, item)
+  appStorage.videoList.value = appStorage.videoList.value.map(($item, $idx) => $idx === updateIdx ? ({ ...item }) : $item)
+}
+
 async function parsePage(item: VideoItem) {
   const url = item.url
   if (!url) return item
@@ -32,7 +61,8 @@ async function parsePage(item: VideoItem) {
   item.videoTitle = videoTitle
   // item.text = md
   item.description = target.videoDetails.shortDescription
-  item.filename = `${item.videoTitle.replace(/\/\\/gi, ',').slice(0, 255)}.md`
+  // item.filename = `${item.videoTitle.replace(/\/\\/gi, ',').slice(0, 255)}.md`
+  item.filename = sanitizeFilename(`${item.videoTitle}.${settings.value.defaultExtension}`)
   // item.filename = `${item.videoTitle.slice(0, 20)}.md`
 
   // fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
@@ -70,7 +100,6 @@ function parseItemWithDescription(item: VideoItem, template?: string): VideoItem
   return ({ ...item, textToFile: getTextByTemplate(item, template ?? DESCRIPTION_TEMPLATE_SAMPLE) })
 }
 
-
 chrome.runtime.onConnect.addListener((port) => {
   cond<chrome.runtime.Port, void>([
     [(p) => p?.name === 'background', (port) => {
@@ -79,18 +108,63 @@ chrome.runtime.onConnect.addListener((port) => {
         flow(
           (m) => typeof m === 'string' ? <MessageCmd> ({ cmd: m }) : <MessageCmd> m,
           cond<MessageCmd, Promise<any>>([
+            [({ cmd }) => cmd === 'getStorageData', async (message) => {
+              const keys: string[] = message.args ?? []
+              const results = await getStorage(...keys)
+              port.postMessage({ ...results })
+            }],
+            [({ cmd }) => cmd === 'setStorageData', async (message) => {
+              const data: { [key: string]: any } = message.args?.[0]
+              await setStorage(data)
+              console.log('setStorage', data, (await getStorage(...Object.keys(data))))
+
+              port.postMessage({ result: true })
+            }],
+            [({ cmd }) => cmd === 'addItem', async (message) => {
+              const item: VideoItem | undefined = message.args?.[0]?.item
+              
+              appStorage.videoList.value.push({
+                videoId: '',
+                videoTitle: '',
+                url: '',
+                description: '',
+                filename: '',
+                ...item,
+              })
+
+              port.postMessage({ result: true, videoList: unref(appStorage.videoList) })
+            }],
+            [({ cmd }) => cmd === 'updateItem', async (message) => {
+              const item: VideoItem = message.args?.[0]?.item
+              const updateIdx: number = message.args?.[0]?.idx
+              updateItem(item, updateIdx)
+
+              port.postMessage({ result: true, videoList: unref(appStorage.videoList) })
+            }],
+            [({ cmd }) => cmd === 'removeItem', async (message) => {
+              const deleteIdx: number = message.args?.[0]?.idx
+              appStorage.videoList.value = appStorage.videoList.value.filter(($0, $idx) => $idx !== deleteIdx)
+
+              port.postMessage({ result: true, videoList: unref(appStorage.videoList) })
+            }],
+            [({ cmd }) => cmd === 'removeAllItems', async (message) => {
+              appStorage.videoList.value = []
+
+              port.postMessage({ result: true, videoList: unref(appStorage.videoList) })
+            }],
             [({ cmd }) => cmd === 'getDescriptionTemplateSample', async (message) => {
               port.postMessage({ result: true, template: DESCRIPTION_TEMPLATE_SAMPLE })
             }],
             [({ cmd }) => cmd === 'zip', async (message) => {
               const option: { template?: string, clearAfterDownload: boolean } = { clearAfterDownload: false, ...message?.args?.[0] }
-              const videoList: VideoItem[] = await getStorage()
+              // const videoList: VideoItem[] = await getStorage()
+              const videoList: VideoItem[] = unref(appStorage.videoList)
               
               const zip = new JSZip()
               const descriptionParsedVideoList: VideoItemWithText[] = videoList.map((item) => parseItemWithDescription(item, option.template))
               const downloadVideoIdList: string[] = descriptionParsedVideoList.filter((item) => item.textToFile?.length > 0).map((item, idx) => {
                 // zip.file(`${new String(idx).padStart(3, '0')}_${item.videoTitle.slice(0, 20)}.md`, item.text)
-                zip.file(item.filename, item.textToFile)
+                zip.file(sanitizeFilename(item.filename), item.textToFile)
                 return item.videoId
               })
     
@@ -105,35 +179,38 @@ chrome.runtime.onConnect.addListener((port) => {
               //   filename: `${Date.now()}.zip`
               // })
 
-              /* 브라우저 - 다운로드 옵션에 따라 다운로드가 안되는 경우가 있어 api 대신 스크립트 삽입 방식 사용 */
-              // await chrome.downloads.download({
-              //   url,
-              //   filename: `${Date.now()}.zip`
-              // })
-              downloadFileWithTab({ url, filename })
+              try {
+                /* 브라우저 - 다운로드 옵션에 따라 다운로드가 안되는 경우가 있어 api 대신 스크립트 삽입 방식 사용 */
+                await downloadFileWithTab({ url, filename })
+              } catch (e) {
+                /* 스크립트 삽입이 불가능하면 api 방식 사용 - 다운로드 시 저장장소를 지정하는 옵션이 켜져있으면 아무일도 안일어남 */
+                await chrome.downloads.download({ url, filename })
+              }
 
               if (option.clearAfterDownload) {
                 // 다운받은 비디오는 항목에서 삭제
                 const videoIds = downloadVideoIdList
-                await getStorage().then(videoList => {
-                  return setStorage(videoList.filter((item: VideoItem) => !videoIds.includes(item.videoId)))
-                })
+                appStorage.videoList.value = unref(appStorage.videoList).filter((item: VideoItem) => !videoIds.includes(item.videoId))
               }
+              // console.log('background.ts::appStorage.videoList', unref(appStorage.videoList))
 
-              port.postMessage({ result: true, url, videoIds: downloadVideoIdList })
+              port.postMessage({ result: true, url, videoIds: downloadVideoIdList, videoList: unref(appStorage.videoList) })
             }],
             [({ cmd }) => cmd === 'parseDescription', async (message) => {
               const option: { item: VideoItem, template?: string } = { ...message?.args?.[0] }
-              const parsedItem = parseItemWithDescription(option.item, option.template)
+              const parsedItem = { ...parseItemWithDescription(option.item, option.template), filename: sanitizeFilename(option.item.filename) }
               
               port.postMessage({ result: true, videoItem: parsedItem })
             }],
-            [({ cmd }) => cmd === 'parsePage', async ({ args = [] }) => {
-              const orgVideoList = args.map(item => <VideoItem> item)
+            [({ cmd }) => cmd === 'parsePage', async (message) => {
+              const args = message.args ?? []
+              const orgVideoList = args.map(({ item, idx }) => ({ item: <VideoItem> item, idx }))
               const parserVideoList = await Promise.allSettled(
-                orgVideoList.map(item => parsePage(item))
+                orgVideoList.map(({ item, idx }) => parsePage(item).then((item) => ({ item, idx })))
               )
-              const videoList = parserVideoList.map((result, i) => (<PromiseFulfilledResult<VideoItem>> result)?.value ?? orgVideoList[i])
+              const videoList = parserVideoList.map((result, i) => (<PromiseFulfilledResult<{ item: VideoItem, idx: number }>> result)?.value ?? orgVideoList[i])
+              // storage 값 업데이트
+              videoList.forEach(({ item, idx }) => updateItem(item, idx))
               port.postMessage({ result: true, videoList: videoList })
             }],
             [({ cmd }) => cmd === 'canGetFromPlayList', async () => {
@@ -168,31 +245,18 @@ chrome.runtime.onConnect.addListener((port) => {
             
               console.log('result', result)
     
-              const videoList: Ref<VideoItem[]> = ref([])
-              const $orgVideoList: VideoItem[] = await getStorage()
+              const $orgVideoList: VideoItem[] = unref(appStorage.videoList)
               const $newVideoList: VideoItem[] = result.map(url => (<VideoItem> { videoId: '', videoTitle: '', url, description: '', filename: '' }))
               
               videoList.value = videoList.value.concat($orgVideoList).concat($newVideoList)
     
               port.postMessage({ result: true, ended: false, videoList: videoList.value })
               
-              // await setStorage(JSON.parse(JSON.stringify($orgVideoList.concat($newVideoList))))
-              // sendResponse({ resultType: 'init', result: true })
-              
               const parserVideoList = await Promise.allSettled(videoList.value.map(
                 (item, idx) => ((idx >= $orgVideoList.length) ? parsePage(item) : Promise.resolve(item))))
-              videoList.value = parserVideoList.map((result, i) => (<PromiseFulfilledResult<VideoItem>> result)?.value ?? videoList.value[i])
+              appStorage.videoList.value = parserVideoList.map((result, i) => (<PromiseFulfilledResult<VideoItem>> result)?.value ?? videoList.value[i])
               
-              // console.log('videoList.value', [...videoList.value])
-              // console.log('parserVideoList', parserVideoList)
-              // const videoList = $orgVideoList.concat(parserVideoList.map((result, i) => (<PromiseFulfilledResult<VideoItem>> result)?.value ?? $newVideoList[i]))
-              
-              // console.log('videoList', videoList)
-    
-              // console.log('setStorage', JSON.parse(JSON.stringify(videoList)))
-              await setStorage(JSON.parse(JSON.stringify(videoList.value)))
-              
-              port.postMessage({ result: true, ended: true, videoList: videoList.value })
+              port.postMessage({ result: true, ended: true, videoList: unref(appStorage.videoList) })
             }]
           ])
         )(message)
@@ -207,20 +271,20 @@ chrome.runtime.onConnect.addListener((port) => {
 /**
  * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 조회
  */
- function getStorage(key = 'videoList') {
-  return chrome.storage.local.get([key]).then(({ [key]: value }) => {
-    return value
+ function getStorage(...keys: string[]) {
+  return chrome.storage.local.get(keys).then((obj: { [key: string]: any }) => {
+    return obj
   })
 }
 /**
  * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 설정
  */
-function setStorage(obj: any, key = 'videoList') {
-  return chrome.storage.local.set({ [key]: obj })
+function setStorage(data: { [key: string]: any }) {
+  return chrome.storage.local.set({ ...data })
 }
 /**
  * Chrome Extension Storage를 이용하여 특정 키 내부의 항목 초기화
  */
-function clearStorage(key = 'videoList') {
-  return chrome.storage.local.remove(key)
+function clearStorage(...keys: string[]) {
+  return chrome.storage.local.remove(keys)
 }
