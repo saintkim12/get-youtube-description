@@ -15,7 +15,7 @@
 <body>
   <div v-scope="App()"></div>
   <template id="app-template">
-    <div :style="{ width: '651px', height: '600px' }">
+    <div :style="{ width: '651px', height: '600px' }" @vue:mounted="mounted">
       <nav class="panel">
         <div class="panel-block p-0 is-block">
           <div class="tabs is-small is-fullwidth">
@@ -30,7 +30,7 @@
             </ul>
           </div>
         </div>
-        <div class="panel-block is-block" :style="{ height: 'calc(600px - 100px)' }">
+        <div class="panel-block is-block" :style="{ height: 'calc(600px - 100px)', position: 'relative' }">
           <template v-if="false"></template>
           <template v-else-if="tabId === 'getDescriptions'">
             <div class="is-flex is-fullwidth is-justify-content-space-between">
@@ -45,7 +45,15 @@
               </div>
             </div>
             <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
-              <template v-for="i in 5">
+              <div class="card pt-2">
+                <div class="card-content p-1" :style="{ position: 'relative', height: '80px' }">
+                  <div class="is-flex is-align-items-center is-justify-content-center" :style="{ position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, color: '#aaa', border: '1px dotted #ddd', borderRadius: '2px', }">
+                    항목추가(<i class="icon mdi mdi-18px mdi-plus-circle"></i>) 버튼을 눌러 항목을 추가할 수 있습니다.
+                  </div>
+                </div>
+              </div>
+
+              <template v-for="i in 1">
                 <div class="card pt-2">
                   <div class="card-content p-1">
                     <div class="media mb-2">
@@ -127,12 +135,19 @@
           <template v-else>
             {{ tabId }}
           </template>
+          <div
+            v-if="loading"
+            class="is-flex is-justify-content-center is-align-items-center"
+            :style="{ position: 'absolute', opacity: '0.8', backgroundColor: 'white', top: 0, left: 0, bottom: 0, right: 0, }"
+          >
+            <div class="loader is-loading" :style="{ width: '80px', height: '80px' }"></div>
+          </div>
         </div>
       </nav>
     </div>
   </template>
   <script>
-    PetiteVue.createApp({
+    const app = PetiteVue.createApp({
       App: () => {
         const tabs = [
           ['getDescriptions', 'Get Descriptions'],
@@ -143,15 +158,21 @@
           $template: '#app-template',
           tabs,
           tabId: tabs?.[0]?.id,
-          getActiveTab(){ const tabId = this.tabId; return tabs.find(({ id }) => id === this.tabId) },
+          loading: false,
+          getActiveTab(){ return tabs.find(({ id }) => id === this.tabId) },
           getActiveTabTitle(){ return this.getActiveTab()?.title },
           descriptionTemplate: `aaa
             bbb
             ccc
-          `
+          `,
+          mounted(el) {
+            // this.loading = true
+            // window.setTimeout(() => this.loading = false, 2000)
+          }
         })
       },
     }).mount()
+    console.log('app', app)
   </script>
 </body>
 </html>

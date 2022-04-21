@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mdi/font": "^6.6.96",
     "bulma": "^0.9.3",
     "client-zip": "^2.0.1",
     "js-file-download": "^0.4.12",

@@ -3,6 +3,8 @@ interface VideoItem {
   videoId: string,
   videoTitle: string,
   url: string,
-  text: string,
+  description: string,
   filename: string,
 }
+
+type VideoItemWithText = VideoItem & { textToFile: string }
