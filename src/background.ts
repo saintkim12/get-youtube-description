@@ -14,8 +14,13 @@ const DESCRIPTION_TEMPLATE_SAMPLE = [
 ].join('\n')
 
 const videoList: Ref<VideoItem[]> = ref([])
-const settings: Ref<{ defaultExtension: string, [key: string]: any }> = ref({
+const settings: Ref<{
+  defaultExtension: string,
+  clearAfterDownload: boolean,
+  [key: string]: any
+}> = ref({
   defaultExtension: 'md',
+  clearAfterDownload: false,
 })
 const appStorage = {
   videoList,
@@ -31,6 +36,14 @@ const appStorage = {
     await setStorage({ 'videoList': JSON.parse(JSON.stringify(unref(appStorage.videoList))) })
     // console.log('setStorage(videoList)', (await getStorage('videoList'))?.videoList?.length ?? 0)
   }), { deep: true })
+  
+  const $settings = (await getStorage('settings'))?.settings
+  Object.assign(settings.value, $settings)
+  
+  watch(settings, debounce(500)(async () => {
+    await setStorage({ 'settings': JSON.parse(JSON.stringify(unref(appStorage.settings))) })
+    console.log('setStorage(settings)', (await getStorage('settings'))?.settings)
+  }), { deep: true })
 })()
 
 
@@ -39,7 +52,7 @@ function updateItem(item: VideoItem, updateIdx: number) {
   appStorage.videoList.value = appStorage.videoList.value.map(($item, $idx) => $idx === updateIdx ? ({ ...item }) : $item)
 }
 
-async function parsePage(item: VideoItem) {
+async function parsePage(item: VideoItem, option?: any) {
   const url = item.url
   if (!url) return item
   const html = await fetch(url).then(r => r.text())
@@ -62,7 +75,7 @@ async function parsePage(item: VideoItem) {
   // item.text = md
   item.description = target.videoDetails.shortDescription
   // item.filename = `${item.videoTitle.replace(/\/\\/gi, ',').slice(0, 255)}.md`
-  item.filename = sanitizeFilename(`${item.videoTitle}.${settings.value.defaultExtension}`)
+  item.filename = sanitizeFilename(`${item.videoTitle}.${option?.extension ?? unref(settings).defaultExtension}`)
   // item.filename = `${item.videoTitle.slice(0, 20)}.md`
 
   // fileDownload(md, `${target.videoDetails.title.slice(0, 20)}.md`)
@@ -155,8 +168,14 @@ chrome.runtime.onConnect.addListener((port) => {
             [({ cmd }) => cmd === 'getDescriptionTemplateSample', async (message) => {
               port.postMessage({ result: true, template: DESCRIPTION_TEMPLATE_SAMPLE })
             }],
+            [({ cmd }) => cmd === 'updateSettings', async (message) => {
+              const option: object = message.args?.[0]
+              Object.assign(appStorage.settings.value, option)
+
+              port.postMessage({ result: true, settings: unref(appStorage.settings) })
+            }],
             [({ cmd }) => cmd === 'zip', async (message) => {
-              const option: { template?: string, clearAfterDownload: boolean } = { clearAfterDownload: false, ...message?.args?.[0] }
+              const option: { template?: string, clearAfterDownload?: boolean } = { ...message?.args?.[0] }
               // const videoList: VideoItem[] = await getStorage()
               const videoList: VideoItem[] = unref(appStorage.videoList)
               
@@ -187,7 +206,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 await chrome.downloads.download({ url, filename })
               }
 
-              if (option.clearAfterDownload) {
+              if (option.clearAfterDownload ?? unref(settings).clearAfterDownload) {
                 // 다운받은 비디오는 항목에서 삭제
                 const videoIds = downloadVideoIdList
                 appStorage.videoList.value = unref(appStorage.videoList).filter((item: VideoItem) => !videoIds.includes(item.videoId))
@@ -204,9 +223,9 @@ chrome.runtime.onConnect.addListener((port) => {
             }],
             [({ cmd }) => cmd === 'parsePage', async (message) => {
               const args = message.args ?? []
-              const orgVideoList = args.map(({ item, idx }) => ({ item: <VideoItem> item, idx }))
+              const orgVideoList = args.map(({ item, idx, ...o }) => ({ item: <VideoItem> item, idx, option: o?.option }))
               const parserVideoList = await Promise.allSettled(
-                orgVideoList.map(({ item, idx }) => parsePage(item).then((item) => ({ item, idx })))
+                orgVideoList.map(({ item, idx, option }) => parsePage(item, option).then((item) => ({ item, idx })))
               )
               const videoList = parserVideoList.map((result, i) => (<PromiseFulfilledResult<{ item: VideoItem, idx: number }>> result)?.value ?? orgVideoList[i])
               // storage 값 업데이트
@@ -222,7 +241,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 func: () => {
                   const elList = document.querySelector('ytd-playlist-panel-renderer:not([hidden])')?.querySelectorAll?.('#items > ytd-playlist-panel-video-renderer > a') ?? []
                   const result = [...Array.from(elList.length ? elList : [])].map(el => (<HTMLAnchorElement> el).href)
-                  console.log('result in tab', result)
+                  // console.log('result in tab', result)
                   return result
                 }
               }).then(([result]) => <string[]> result?.result ?? [])
@@ -238,7 +257,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 func: () => {
                   const elList = document.querySelector('ytd-playlist-panel-renderer:not([hidden])')?.querySelectorAll?.('#items > ytd-playlist-panel-video-renderer > a') ?? []
                   const result = [...Array.from(elList.length ? elList : [])].map(el => (<HTMLAnchorElement> el).href)
-                  console.log('result in tab', result)
+                  // console.log('result in tab', result)
                   return result
                 }
               }).then(([result]) => <string[]> result?.result ?? [])

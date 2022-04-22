@@ -130,6 +130,25 @@
               </div>
             </div>
             <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+              <div class="">
+                <!-- <div class="buttons are-small has-addons m-0 p-1"> -->
+                  <!-- <button class="mb-0 button is-dark is-static">파일기본확장자</button> -->
+                  <!-- <button class="mb-0 button is-success is-selected">md</button> -->
+                  <!-- <button class="mb-0 button">txt</button> -->
+                <!-- </div> -->
+                <div v-for="option in settingsList" :key="option.name" class="buttons are-small has-addons m-0 p-1">
+                  <button class="mb-0 button is-dark is-static">{{ option.label }}</button>
+                  <button
+                    v-for="(v, idx) in option.values"
+                    :key="idx"
+                    class="mb-0 button"
+                    :class="[getSettingsOptionButtonClass(option.name, v.value)]"
+                    @click="settings[option.name] = v.value"
+                  >
+                    {{ v.text }}
+                  </button>
+                </div>
+              </div>
             </div>
           </template>
           <template v-else>
@@ -157,10 +176,32 @@
         return ({
           $template: '#app-template',
           tabs,
-          tabId: tabs?.[0]?.id,
+          tabId: tabs?.[2]?.id,
           loading: false,
+          settingsList: [
+            { name: 'extension', label: '파일기본확장자', valueType: String, values: [{ text: 'md', value: 'md' }, { text: 'txt', value: 'txt' }] },
+            { name: 'clearAfterDownload', label: '전체 다운로드후 데이터', valueType: Boolean, values: [{ text: '유지', value: false }, { text: '자동삭제', value: true }] },
+          ],
+          settings: {
+            extension: 'md',
+            clearAfterDownload: true,
+          },
           getActiveTab(){ return tabs.find(({ id }) => id === this.tabId) },
           getActiveTabTitle(){ return this.getActiveTab()?.title },
+          isSettingsOptionChecked(name, optionValue){ return this.settings?.[name] === optionValue },
+          getSettingsOptionButtonClass(name, optionValue){
+            if (this.isSettingsOptionChecked(name, optionValue)) {
+              const option = this.settingsList.find(o => o.name === name)
+              const valueType = option?.valueType
+              const valueIdx = option?.values?.findIndex((o) => o.value === optionValue)
+              return [
+                'is-selected',
+                ...(valueType === Boolean && valueIdx === 0 ? ['is-primary'] : valueType === Boolean && valueIdx === option?.values?.length - 1 ? ['is-danger'] : ['is-info'])
+              ]
+            } else {
+              return []
+            }
+          },
           descriptionTemplate: `aaa
             bbb
             ccc
@@ -168,7 +209,7 @@
           mounted(el) {
             // this.loading = true
             // window.setTimeout(() => this.loading = false, 2000)
-          }
+          },
         })
       },
     }).mount()

@@ -3,6 +3,11 @@ import { computed, Ref, ref, nextTick, unref } from 'vue'
 import fileDownload from 'js-file-download'
 
 const videoList: Ref<VideoItem[]> = ref([])
+const settings: Ref<{ [key: string]: any }> = ref({})
+const settingsList: Ref<SettingOption[]> = ref([
+  { name: 'defaultExtension', label: '파일기본확장자', valueType: String, values: [{ text: 'md', value: 'md' }, { text: 'txt', value: 'txt' }] },
+  { name: 'clearAfterDownload', label: '전체 다운로드후 데이터', valueType: Boolean, values: [{ text: '유지', value: false }, { text: '자동삭제', value: true }] },
+])
 const videoListRef: Ref<HTMLDivElement | undefined> = ref()
 
 const parseCurrentPage = async (item: VideoItem, idx: number) => {
@@ -22,6 +27,20 @@ function updateFileExtension(idx: number, target: EventTarget | null) {
   if (!item) return
   item.filename = item.filename.replace(/\.(md|txt)[\s]*$/i, `.${extension}`)
   return updateItem(idx)
+}
+
+function getSettingsOptionButtonClass(name: string, optionValue: any) {
+  const isChecked = unref(settings)?.[name] === optionValue
+  if (!isChecked) return []
+  const option = unref(settingsList).find(o => o.name === name)
+  const valueType = option?.valueType
+  const valueIdx = option?.values?.findIndex?.((o) => o.value === optionValue) ?? -1
+  const isPrimary = valueType === Boolean && valueIdx === 0
+  const isDanger = valueType === Boolean && valueIdx + 1 === option?.values?.length
+  return [
+    'is-selected',
+    ...(isPrimary ? ['is-primary'] : isDanger ? ['is-danger'] : ['is-info'])
+  ]
 }
 
 /***************************
@@ -136,9 +155,9 @@ function getFromPlayList() {
     })
   }))
 }
-function parsePage(item: VideoItem, idx: number) {
+function parsePage(item: VideoItem, idx: number, option?: any) {
   return new Promise((resolve) => {
-    runInBackground({ cmd: 'parsePage', args: [{ item, idx }] }, (message, port) => {
+    runInBackground({ cmd: 'parsePage', args: [{ item, idx, option }] }, (message, port) => {
       if (message?.result === true) {
         const videoItem: VideoItem = message.videoList?.[0]?.item
         Object.assign(item, videoItem)
@@ -177,6 +196,19 @@ function initCanGetFromPlayList() {
     })
   })
 }
+function updateSettings(name: string, value: any) {
+  return new Promise((resolve) => {
+    runInBackground({ cmd: 'updateSettings', args: [{ [name]: value }] }, (message, port) => {
+      port.disconnect()
+      resolve(message)
+      return true
+    })
+  }).then(() => {
+    Object.assign(settings.value, { [name]: value })
+  })
+}
+
+
 function getStorageData(...keys: string[]): Promise<{ [key: string]: any }> {
   return new Promise((resolve) => {
     runInBackground({ cmd: 'getStorageData', args: keys }, (message, port) => {
@@ -186,15 +218,15 @@ function getStorageData(...keys: string[]): Promise<{ [key: string]: any }> {
     })
   })
 }
-function setStorageData(data: { [key: string]: any }) {
-  return new Promise((resolve) => {
-    runInBackground({ cmd: 'setStorageData', args: [data] }, (message, port) => {
-      port.disconnect()
-      resolve(message)
-      return true
-    })
-  })
-}
+// function setStorageData(data: { [key: string]: any }) {
+//   return new Promise((resolve) => {
+//     runInBackground({ cmd: 'setStorageData', args: [data] }, (message, port) => {
+//       port.disconnect()
+//       resolve(message)
+//       return true
+//     })
+//   })
+// }
 
 /**************************
  * test
@@ -232,6 +264,9 @@ const canGetFromPlayList = ref(false)
     const $videoList = (await getStorageData('videoList'))?.videoList
     // console.log('$videoList', $videoList)
     videoList.value = [...(Array.isArray($videoList) ? $videoList : [])]
+    
+    const $settings = (await getStorageData('settings'))?.settings
+    Object.assign(settings.value, $settings)
 
     await initDescriptionTemplateSample()
 
@@ -295,9 +330,9 @@ const canGetFromPlayList = ref(false)
                             </p>
                             <p class="control">
                               <span class="select is-small">
-                                <select @change="updateFileExtension(idx, $event.target)">
+                                <select :disabled="!(item.filename?.length > 0)" @change="updateFileExtension(idx, $event.target)">
                                   <option value="md">md</option>
-                                  <option value="txt" :selected="/\.(txt)[\s]*$/i.test(item.filename)">txt</option>
+                                  <option value="txt" :selected="item.filename ? /\.(txt)[\s]*$/i.test(item.filename) : (settings.defaultExtension === 'txt')">txt</option>
                                 </select>
                               </span>
                             </p>
@@ -367,6 +402,20 @@ const canGetFromPlayList = ref(false)
             </div>
           </div>
           <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">
+            <div class="">
+              <div v-for="option in settingsList" :key="option.name" class="buttons are-small has-addons m-0 p-1">
+                <button class="mb-0 button is-dark is-static">{{ option.label }}</button>
+                <button
+                  v-for="(v, idx) in option.values"
+                  :key="idx"
+                  class="mb-0 button"
+                  :class="[getSettingsOptionButtonClass(option.name, v.value)]"
+                  @click="updateSettings(option.name, v.value)"
+                >
+                  {{ v.text }}
+                </button>
+              </div>
+            </div>
           </div>
         </template>
         <template v-else>
