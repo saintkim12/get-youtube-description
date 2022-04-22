@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
-    "preset": "cp node_modules/bulma/css/bulma.min.css src/assets",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@jamescoyle/vue-icon": "^0.1.2",
     "@mdi/font": "^6.6.96",
     "bulma": "^0.9.3",
     "client-zip": "^2.0.1",
@@ -19,14 +19,15 @@
     "vue": "^3.2.25"
   },
   "devDependencies": {
+    "@mdi/js": "^6.6.96",
     "@types/chrome": "^0.0.180",
     "@types/lodash": "^4.14.181",
     "@types/node": "^17.0.23",
-    "@vitejs/plugin-vue": "^2.3.0",
+    "@vitejs/plugin-vue": "^2.3.1",
+    "rollup-plugin-chrome-extension": "^4.0.1-24",
     "sass": "^1.50.0",
     "typescript": "^4.5.4",
-    "vite": "^2.9.0",
-    "vite-plugin-chrome-extension": "^0.0.7",
-    "vue-tsc": "^0.29.8"
+    "vite": "^2.9.5",
+    "vue-tsc": "^0.34.7"
   }
 }

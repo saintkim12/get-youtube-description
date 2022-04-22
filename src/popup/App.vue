@@ -1,4 +1,18 @@
 <script setup lang="ts">
+import SvgIcon from '@jamescoyle/vue-icon'
+import {
+  mdiDownloadMultiple,
+  mdiPlusCircle,
+  mdiTrashCan,
+  mdiMusicNotePlus,
+  mdiBookArrowRightOutline,
+  mdiDownload,
+  mdiClose,
+  mdiWeb,
+  mdiCheck,
+  mdiCached,
+  mdiContentSave,
+} from '@mdi/js'
 import { computed, Ref, ref, nextTick, unref } from 'vue'
 import fileDownload from 'js-file-download'
 
@@ -299,17 +313,21 @@ const canGetFromPlayList = ref(false)
               <h3 class="subtitle">{{ activeTab?.title }}</h3>
             </div>
             <div class="is-flex">
-              <button class="button is-small ml-1" title="전체다운로드" @click="downloadAllVideoDescription">
-                <i class="icon mdi mdi-18px mdi-download-multiple"></i>
+              <button class="button is-small px-1 ml-1" title="전체다운로드" @click="downloadAllVideoDescription">
+                <SvgIcon type="mdi" :size="18" :path="mdiDownloadMultiple" />
+                <!-- <i class="icon mdi mdi-18px mdi-download-multiple"></i> -->
               </button>
-              <button class="button is-small ml-1" title="항목추가" @click="addItem">
-                <i class="icon mdi mdi-18px mdi-plus-circle"></i>
+              <button class="button is-small px-1 ml-1" title="항목추가" @click="addItem">
+                <SvgIcon type="mdi" :size="18" :path="mdiPlusCircle" />
+                <!-- <i class="icon mdi mdi-18px mdi-plus-circle"></i> -->
               </button>
-              <button class="button is-small ml-1" title="전체삭제" @click="removeAllItems">
-                <i class="icon mdi mdi-18px mdi-trash-can"></i>
+              <button class="button is-small px-1 ml-1" title="전체삭제" @click="removeAllItems">
+                <SvgIcon type="mdi" :size="18" :path="mdiTrashCan" />
+                <!-- <i class="icon mdi mdi-18px mdi-trash-can"></i> -->
               </button>
-              <button class="button is-small ml-1" title="플레이리스트추가" :disabled="!canGetFromPlayList" @click="getFromPlayList">
-                <i class="icon mdi mdi-18px mdi-music-note-plus"></i>
+              <button class="button is-small px-1 ml-1" title="플레이리스트추가" :disabled="!canGetFromPlayList" @click="getFromPlayList">
+                <SvgIcon type="mdi" :size="18" :path="mdiMusicNotePlus" />
+                <!-- <i class="icon mdi mdi-18px mdi-music-note-plus"></i> -->
               </button>
             </div>
           </div>
@@ -338,9 +356,18 @@ const canGetFromPlayList = ref(false)
                             </p>
                           </div>
                           <div>
-                            <button class="button is-small ml-1" title="현재페이지" @click.prevent="parseCurrentPage(item, idx)"><i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i></button>
-                            <button class="button is-small ml-1" title="다운로드" :disabled="!(item.description?.length > 0)" @click.prevent="downloadOneVideoDescription(item)"><i class="icon mdi mdi-18px mdi-download"></i></button>
-                            <button class="button is-small ml-1" title="삭제" @click.prevent="removeItem(item, idx)"><i class="icon mdi mdi-18px mdi-close"></i></button>
+                            <button class="button is-small px-1 ml-1" title="현재페이지" @click.prevent="parseCurrentPage(item, idx)">
+                              <SvgIcon type="mdi" :size="18" :path="mdiBookArrowRightOutline" />
+                              <!-- <i class="icon mdi mdi-18px mdi-book-arrow-right-outline"></i> -->
+                            </button>
+                            <button class="button is-small px-1 ml-1" title="다운로드" :disabled="!(item.description?.length > 0)" @click.prevent="downloadOneVideoDescription(item)">
+                              <SvgIcon type="mdi" :size="18" :path="mdiDownload" />
+                              <!-- <i class="icon mdi mdi-18px mdi-download"></i> -->
+                            </button>
+                            <button class="button is-small px-1 ml-1" title="삭제" @click.prevent="removeItem(item, idx)">
+                              <SvgIcon type="mdi" :size="18" :path="mdiClose" />
+                              <!-- <i class="icon mdi mdi-18px mdi-close"></i> -->
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -350,10 +377,12 @@ const canGetFromPlayList = ref(false)
                       <div class="control has-icons-left has-icons-right">
                         <input class="input is-small" type="text" :value="item.url" @change="parsePage(item, idx)">
                         <span class="icon is-small is-left">
-                          <i class="mdi mdi-web"></i>
+                          <SvgIcon type="mdi" :size="18" :path="mdiWeb" />
+                          <!-- <i class="mdi mdi-web"></i> -->
                         </span>
                         <span class="icon is-small is-right">
-                          <i class="mdi mdi-check"></i>
+                          <SvgIcon type="mdi" :size="18" :path="mdiCheck" />
+                          <!-- <i class="mdi mdi-check"></i> -->
                         </span>
                       </div>
                     </div>
@@ -366,7 +395,7 @@ const canGetFromPlayList = ref(false)
               <div class="card pt-2">
                 <div class="card-content p-1" :style="{ position: 'relative', height: '80px' }">
                   <div class="is-flex is-align-items-center is-justify-content-center" :style="{ position: 'absolute', top: 0, left: 0, bottom: 0, right: 0, color: '#aaa', border: '1px dotted #ddd', borderRadius: '2px', }">
-                    항목추가(<i class="icon mdi mdi-18px mdi-plus-circle"></i>) 버튼을 눌러 항목을 추가할 수 있습니다.
+                    항목추가(<SvgIcon type="mdi" :size="18" :path="mdiPlusCircle" /><!-- <i class="icon mdi mdi-18px mdi-plus-circle"></i> -->) 버튼을 눌러 항목을 추가할 수 있습니다.
                   </div>
                 </div>
               </div>
@@ -379,8 +408,14 @@ const canGetFromPlayList = ref(false)
               <h3 class="subtitle">{{ activeTab?.title }}</h3>
             </div>
             <div class="is-flex">
-              <button class="button is-small ml-1" title="초기화" @click="initDescriptionTemplateSample"><i class="icon mdi mdi-18px mdi-cached"></i></button>
-              <button class="button is-small ml-1" title="저장"><i class="icon mdi mdi-18px mdi-content-save"></i></button>
+              <button class="button is-small px-1 ml-1" title="초기화" @click="initDescriptionTemplateSample">
+                <SvgIcon type="mdi" :size="18" :path="mdiCached" />
+                <!-- <i class="icon mdi mdi-18px mdi-cached"></i> -->
+              </button>
+              <button class="button is-small px-1 ml-1" title="저장">
+                <SvgIcon type="mdi" :size="18" :path="mdiContentSave" />
+                <!-- <i class="icon mdi mdi-18px mdi-content-save"></i> -->
+              </button>
             </div>
           </div>
           <div class="is-block mt-1" :style="{ height: 'calc(100% - 30px - 0.25rem)', overflow: 'auto' }">

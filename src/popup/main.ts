@@ -1,4 +1,4 @@
-// import 'bulma'
+import 'bulma'
 import { createApp } from 'vue'
 import App from './App.vue'
 
