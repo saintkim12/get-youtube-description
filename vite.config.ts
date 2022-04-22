@@ -1,13 +1,15 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { chromeExtension } from "vite-plugin-chrome-extension"
+import { chromeExtension } from 'rollup-plugin-chrome-extension'
+// @ts-ignore
+import manifest from './manifest.json'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
-    chromeExtension(),
+    chromeExtension({ manifest }),
   ],
   resolve: {
     alias: {
@@ -16,7 +18,10 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      input: "src/manifest.json"
+      input: {
+        popup: resolve(__dirname, 'src/popup/index.html'),
+        background: resolve(__dirname, 'src/background.ts'),
+      }
     }
   },
 })
